@@ -16,8 +16,8 @@ import io.mosip.esignet.api.exception.KycAuthException;
 import io.mosip.esignet.api.exception.SendOtpException;
 import io.mosip.esignet.api.spi.KeyBinder;
 import io.mosip.esignet.api.util.ErrorConstants;
-import io.mosip.esignet.plugin.peru.dto.IdentityData;
-import io.mosip.kernel.core.http.ResponseWrapper;
+import io.mosip.esignet.plugin.peru.dto.KycAuth;
+import io.mosip.esignet.plugin.peru.dto.Valid;
 import io.mosip.kernel.core.util.DateUtils;
 import io.mosip.kernel.keymanagerservice.dto.KeyPairGenerateRequestDto;
 import io.mosip.kernel.keymanagerservice.dto.SignatureCertificate;
@@ -29,11 +29,8 @@ import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.RequestEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.security.auth.x500.X500Principal;
 import java.io.StringWriter;
@@ -50,7 +47,7 @@ import java.util.Optional;
 @ConditionalOnProperty(value = "mosip.esignet.integration.key-binder", havingValue = "MockKeyBindingWrapperService")
 @Component
 @Slf4j
-public class MockKeyBindingWrapperService implements KeyBinder {
+public class PeruKeyBindingWrapperService implements KeyBinder {
 
     public static final String BINDING_SERVICE_APP_ID = "MOCK_BINDING_SERVICE";
     private static final String OTP_VALUE = "111111";
@@ -75,7 +72,10 @@ public class MockKeyBindingWrapperService implements KeyBinder {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private MockHelperService mockHelperService;
+    private HelperService helperService;
+
+    @Autowired
+    private CacheService cacheService;
 
     private static final Map<String, List<String>> supportedKeyBindingFormats = new HashMap<>();
 
@@ -84,6 +84,7 @@ public class MockKeyBindingWrapperService implements KeyBinder {
         supportedKeyBindingFormats.put("OTP", List.of("alpha-numeric"));
         supportedKeyBindingFormats.put("PIN", List.of("number"));
         supportedKeyBindingFormats.put("BIO", List.of("encoded-json"));
+        supportedKeyBindingFormats.put("KBA", List.of("base64url-encoded-json"));
 
     }
 
@@ -95,7 +96,7 @@ public class MockKeyBindingWrapperService implements KeyBinder {
         String relyingPartyId = "MockRelyingPartyId";
         String clientId = "MockClientId";
 
-        var sendOtpResult = mockHelperService.sendOtpMock(transactionId, individualId, otpChannels, relyingPartyId, clientId);
+        var sendOtpResult = helperService.sendOtpMock(transactionId, individualId, otpChannels, relyingPartyId, clientId);
         return sendOtpResult;
     }
 
@@ -111,46 +112,34 @@ public class MockKeyBindingWrapperService implements KeyBinder {
         // use dummy transactionId
         var kycAuthDto = new KycAuthDto();
 
-        String transactionId = "MockTransaction";
+        String transactionId = "PeruTransaction";
         kycAuthDto.setTransactionId(transactionId);
         kycAuthDto.setIndividualId(individualId);
         kycAuthDto.setChallengeList(challengeList);
-        String relyingPartyId = "MockRelyingPartyId";
-        String clientId = "MockClientId";
+        String relyingPartyId = "PeruRelyingPartyId";
+        String clientId = "PeruClientId";
 
+        KycAuth kycAuth= null;
         try {
-            var kycAuthResult = mockHelperService.doKycAuthMock(relyingPartyId, clientId, kycAuthDto);
+            var kycAuthResult = helperService.doKycAuth(relyingPartyId, clientId, kycAuthDto);
             if (kycAuthResult == null || kycAuthResult.getKycToken() == null) {
                 //If not authenticated, throw error
                 throw new KeyBindingException(ErrorConstants.KEY_BINDING_FAILED);
+            }
+            kycAuth=cacheService.getKycAuth(kycAuthResult.getKycToken());
+            if(kycAuth==null || !kycAuth.getValidity().equals(Valid.ACTIVE) || kycAuth.getDatosPersona()==null){
+                throw new KeyBindingException("peru-ida-006");
             }
         } catch (KycAuthException e) {
             throw new KeyBindingException(e.getErrorCode());
         }
 
-        IdentityData identityData = null;
-        try {
-            var requestEntity = RequestEntity
-                    .get(UriComponentsBuilder.fromUriString(getIdentityUrl + "/" + individualId).build().toUri()).build();
-            var responseEntity = restTemplate.exchange(requestEntity,
-                    ResponseWrapper.class);
-            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
-                var responseWrapper = responseEntity.getBody();
-                identityData = objectMapper.convertValue(responseWrapper.getResponse(), IdentityData.class);
-            }
-        } catch (Exception e) {
-            log.error("failed to fetch individual data", e);
-            throw new KeyBindingException("auth_failed", e.getMessage());
-        }
-
         //create a signed certificate, with cn as username
         //certificate validity based on configuration
         try {
-            RSAKey rsaKey = RSAKey.parse(new JSONObject(publicKeyJWK));
+            RSAKey rsaKey = RSAKey.parse(new JSONObject(publicKeyJWK).toJSONString());
             X509V3CertificateGenerator generator = new X509V3CertificateGenerator();
-            String username = !CollectionUtils.isEmpty(identityData.getName()) ?
-                    identityData.getName().get(0).getValue() : (!CollectionUtils.isEmpty(identityData.getFullName()) ?
-                    identityData.getFullName().get(0).getValue() : "mock-user");
+            String username = kycAuth.getDatosPersona().getPrenombres();
             generator.setSubjectDN(new X500Principal("CN=" + username));
             generator.setIssuerDN(new X500Principal("CN=Mock-IDA"));
             LocalDateTime notBeforeDate = DateUtils.getUTCCurrentDateTime();

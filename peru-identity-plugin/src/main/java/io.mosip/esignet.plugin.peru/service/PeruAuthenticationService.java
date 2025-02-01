@@ -37,7 +37,7 @@ import java.util.Optional;
 @ConditionalOnProperty(value = "mosip.esignet.integration.authenticator", havingValue = "MockAuthenticationService")
 @Component
 @Slf4j
-public class MockAuthenticationService implements Authenticator {
+public class PeruAuthenticationService implements Authenticator {
 
     private static final String APPLICATION_ID = "MOCK_AUTHENTICATION_SERVICE";
     public static final String SEND_OTP_FAILED = "send_otp_failed";
@@ -51,7 +51,7 @@ public class MockAuthenticationService implements Authenticator {
     private KeymanagerService keymanagerService;
 
     @Autowired
-    private MockHelperService mockHelperService;
+    private HelperService helperService;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -68,7 +68,7 @@ public class MockAuthenticationService implements Authenticator {
 
         log.info("Started to build kyc-auth request with transactionId : {} && clientId : {}",
                 kycAuthDto.getTransactionId(), clientId);
-        return mockHelperService.doKycAuthMock(relyingPartyId, clientId, kycAuthDto);
+        return helperService.doKycAuth(relyingPartyId, clientId, kycAuthDto);
     }
 
     @Override
@@ -78,19 +78,19 @@ public class MockAuthenticationService implements Authenticator {
                 kycExchangeDto.getTransactionId(), clientId);
         try {
             KycExchangeRequestDto kycExchangeRequestDto = new KycExchangeRequestDto();
-            kycExchangeRequestDto.setRequestDateTime(MockHelperService.getUTCDateTime());
+            kycExchangeRequestDto.setRequestDateTime(HelperService.getUTCDateTime());
             kycExchangeRequestDto.setTransactionId(kycExchangeDto.getTransactionId());
             kycExchangeRequestDto.setKycToken(kycExchangeDto.getKycToken());
             kycExchangeRequestDto.setIndividualId(kycExchangeDto.getIndividualId());
             kycExchangeRequestDto.setAcceptedClaims(kycExchangeDto.getAcceptedClaims());
             kycExchangeRequestDto.setClaimLocales(Arrays.asList(kycExchangeDto.getClaimsLocales()));
-            return mockHelperService.kycExchange(relyingPartyId, clientId, kycExchangeRequestDto);
+            return helperService.kycExchange(relyingPartyId, clientId, kycExchangeRequestDto);
         } catch (KycExchangeException e) {
             throw e;
         } catch (Exception e) {
             log.error("IDA Kyc-exchange failed with clientId : {}", clientId, e);
         }
-        throw new KycExchangeException("mock-ida-005", "Failed to build kyc data");
+        throw new KycExchangeException("peru-ida-005", "Failed to build kyc data");
     }
 
     @Override
@@ -100,12 +100,12 @@ public class MockAuthenticationService implements Authenticator {
             throw new SendOtpException("invalid_transaction_id");
         }
 
-        return mockHelperService.sendOtpMock(sendOtpDto.getTransactionId(), sendOtpDto.getIndividualId(), sendOtpDto.getOtpChannels(), relyingPartyId, clientId);
+        return helperService.sendOtpMock(sendOtpDto.getTransactionId(), sendOtpDto.getIndividualId(), sendOtpDto.getOtpChannels(), relyingPartyId, clientId);
     }
 
     @Override
     public boolean isSupportedOtpChannel(String channel) {
-        return mockHelperService.isSupportedOtpChannel(channel);
+        return helperService.isSupportedOtpChannel(channel);
     }
 
     @Override

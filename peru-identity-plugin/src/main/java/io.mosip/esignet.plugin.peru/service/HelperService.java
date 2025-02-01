@@ -35,7 +35,7 @@ import java.util.stream.IntStream;
 
 @Component
 @Slf4j
-public class MockHelperService {
+public class HelperService {
     public static final String ALGO_SHA3_256 = "SHA3-256";
 
 
@@ -47,7 +47,7 @@ public class MockHelperService {
     @Value("${mosip.esignet.mock.authenticator.ida.otp-channels}")
     private List<String> otpChannels;
 
-    @Value("${mosip.esignet.mock.authenticator.ida.opt-value:11111}")
+    @Value("${mosip.esignet.mock.authenticator.ida.opt-value:111111}")
     private String otpValue;
 
 
@@ -110,9 +110,7 @@ public class MockHelperService {
     }
 
     public SendOtpResult sendOtpMock(String transactionId, String individualId, List<String> otpChannels, String relyingPartyId, String clientId)
-             {
-
-
+    {
           SendOtpResult sendOtpResult = new SendOtpResult();
           sendOtpResult.setMaskedEmail(maskEmail("mock468@gmail.com"));
           sendOtpResult.setMaskedMobile(maskMobile("89898989898"));
@@ -120,7 +118,7 @@ public class MockHelperService {
           return  sendOtpResult;
     }
 
-    public KycAuthResult  doKycAuthMock(String relyingPartyId, String clientId, KycAuthDto kycAuthDto)
+    public KycAuthResult doKycAuth(String relyingPartyId, String clientId, KycAuthDto kycAuthDto)
             throws KycAuthException {
             KycAuthRequestDto kycAuthRequestDto = new KycAuthRequestDto();
             kycAuthRequestDto.setTransactionId(kycAuthDto.getTransactionId());
@@ -129,8 +127,10 @@ public class MockHelperService {
             for (AuthChallenge authChallenge : kycAuthDto.getChallengeList()) {
                 if (Objects.equals(authChallenge.getAuthFactorType(), "KBA")) {
                     kycAuthResult= validateKnowledgeBasedAuth(kycAuthDto.getIndividualId(),authChallenge);
-                }
-                else {
+                } else if (Objects.equals(authChallenge.getAuthFactorType(), "OTP")) {
+                    kycAuthResult= validateOtpBasedAuth(kycAuthDto);
+
+                } else {
                     throw new KycAuthException("invalid_auth_challenge");
                 }
                 if (!isKycAuthFormatSupported(authChallenge.getAuthFactorType(), authChallenge.getFormat())) {
