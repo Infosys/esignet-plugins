@@ -64,10 +64,11 @@ public class HealthAuthenticatorImpl implements Authenticator {
         if (!authStatus)
             throw new KycAuthException("auth_failed");
 
-        localMap.put(kycAuthDto.getTransactionId(), UUID.randomUUID().toString());
+        String token = UUID.randomUUID().toString();
+        localMap.put(token, kycAuthDto.getIndividualId());
         KycAuthResult kycAuthResult = new KycAuthResult();
-        kycAuthResult.setKycToken(localMap.get(kycAuthDto.getTransactionId()));
-        kycAuthResult.setPartnerSpecificUserToken(localMap.get(kycAuthDto.getTransactionId()));
+        kycAuthResult.setKycToken(token);
+        kycAuthResult.setPartnerSpecificUserToken(token);
         return kycAuthResult;
     }
 
