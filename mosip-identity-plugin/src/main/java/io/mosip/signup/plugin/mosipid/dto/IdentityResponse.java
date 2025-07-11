@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class IdentityResponse {
@@ -16,5 +17,5 @@ public class IdentityResponse {
     private String status;
     private JsonNode identity;
     private List<String> documents;
-    private List<String> verifiedAttributes;
+    private List<Map<String,String>> verifiedAttributes;
 }
